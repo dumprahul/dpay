@@ -16,13 +16,19 @@ export default function Home() {
               href="/register"
               className="flex h-12 w-full items-center justify-center rounded-full bg-black px-8 text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200 sm:w-auto"
             >
-              Register
+              Create Room
             </Link>
             <Link
               href="/join"
               className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black px-8 transition-colors hover:bg-black hover:text-white dark:border-white dark:hover:bg-white dark:hover:text-black sm:w-auto"
             >
-              Join
+              Join Room
+            </Link>
+            <Link
+              href="/rooms"
+              className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black px-8 transition-colors hover:bg-black hover:text-white dark:border-white dark:hover:bg-white dark:hover:text-black sm:w-auto"
+            >
+              My Rooms
             </Link>
           </div>
         </div>
