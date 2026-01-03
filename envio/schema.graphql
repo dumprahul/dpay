@@ -1,0 +1,56 @@
+# FamilyWallet Indexer Schema
+
+type Vault @entity {
+  id: ID!                        # {chainId}-{address}
+  chainId: Int!
+  address: String!
+  
+  totalSpent: BigInt!
+  spendCount: Int!
+  memberCount: Int!
+  
+  firstSeenAt: BigInt!
+  lastActivityAt: BigInt!
+  
+  members: [Member!]! @derivedFrom(field: "vault")
+  spends: [Spend!]! @derivedFrom(field: "vault")
+}
+
+type Member @entity {
+  id: ID!                        # {chainId}-{vaultAddress}-{memberAddress}
+  chainId: Int!
+  address: String!
+  
+  vault: Vault!
+  
+  totalSpent: BigInt!
+  spendCount: Int!
+  
+  firstSeenAt: BigInt!
+  lastActiveAt: BigInt!
+  
+  spends: [Spend!]! @derivedFrom(field: "member")
+}
+
+type Spend @entity {
+  id: ID!                        # {chainId}-{txHash}-{logIndex}
+  chainId: Int!
+  
+  vault: Vault!
+  member: Member!
+  
+  # Actual spend details (decoded from tx calldata)
+  token: String
+  amount: BigInt
+  recipient: String
+  
+  # Budget constraints (from delegation caveats)
+  budgetLimit: BigInt
+  budgetPeriod: BigInt
+  expiresAt: BigInt
+  
+  # Tx info
+  timestamp: BigInt!
+  txHash: String!
+  blockNumber: BigInt!
+}

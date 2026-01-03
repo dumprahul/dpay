@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+name: FamilyVaults
+description: FamilyVaults Indexer
+contracts:
+  - name: DelegationManager
+    abi_file_path: ./abis/greeter-abi.json
+    handler: ./src/EventHandlers.ts
+    events:
+      - event: EnabledDelegation
+      - event: RedeemedDelegation
+      - event: DisabledDelegation
+networks:
+  - id: 84532 # Base Sepolia
+    start_block: 19490000
+    contracts:
+      - name: DelegationManager
+        address: 0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3
+# Include transaction input for decoding actual spend amounts
+field_selection:
+  transaction_fields:
+    - "hash"
+    - "input"
