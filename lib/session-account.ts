@@ -58,6 +58,7 @@ export async function generateSessionAccount(): Promise<{
   } else {
     // Generate new private key
     privateKey = generatePrivateKey();
+    
   }
 
   // Create account from private key

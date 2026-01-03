@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import AuthButton from '@/components/AuthButton';
+import DelegationModal from '@/components/DelegationModal';
 import type { User } from '@supabase/supabase-js';
 
 interface RoomMember {
@@ -27,6 +28,13 @@ export default function Rooms() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loadingRooms, setLoadingRooms] = useState(false);
   const [error, setError] = useState('');
+  const [delegationModal, setDelegationModal] = useState<{
+    isOpen: boolean;
+    memberAddress: string;
+  }>({
+    isOpen: false,
+    memberAddress: '',
+  });
 
   useEffect(() => {
     // Check for existing session
@@ -260,16 +268,30 @@ export default function Rooms() {
                                       Joined: {new Date(member.joined_at).toLocaleString()}
                                     </p>
                                   </div>
-                                  <button
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(member.wallet_address);
-                                      alert('Wallet address copied!');
-                                    }}
-                                    className="ml-2 rounded px-2 py-1 text-xs text-zinc-600 transition-colors hover:bg-zinc-200 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                                    title="Copy wallet address"
-                                  >
-                                    Copy
-                                  </button>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => {
+                                        setDelegationModal({
+                                          isOpen: true,
+                                          memberAddress: member.wallet_address,
+                                        });
+                                      }}
+                                      className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+                                      title="Delegate USDC to this member"
+                                    >
+                                      Delegate
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(member.wallet_address);
+                                        alert('Wallet address copied!');
+                                      }}
+                                      className="ml-2 rounded px-2 py-1 text-xs text-zinc-600 transition-colors hover:bg-zinc-200 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                                      title="Copy wallet address"
+                                    >
+                                      Copy
+                                    </button>
+                                  </div>
                                 </div>
                               ))}
                             </div>
@@ -298,6 +320,14 @@ export default function Rooms() {
           </div>
         </div>
       </main>
+
+      <DelegationModal
+        isOpen={delegationModal.isOpen}
+        onClose={() =>
+          setDelegationModal({ isOpen: false, memberAddress: '' })
+        }
+        memberAddress={delegationModal.memberAddress}
+      />
     </div>
   );
 }
