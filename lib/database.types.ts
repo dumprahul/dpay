@@ -2,6 +2,7 @@ export interface Room {
   id: string;
   room_name: string;
   owner_address: string;
+  user_email: string;
   invite_code: string;
   created_at: string;
 }
