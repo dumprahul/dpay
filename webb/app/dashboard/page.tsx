@@ -1,12 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
 import { getStoredSessionAccount } from '@/lib/session-account';
 import { getDelegationsWithDetails } from '@/lib/delegations';
 import PaymentModal from '@/components/PaymentModal';
 import type { Delegation } from '@/lib/database.types';
+
+// Dynamically import QR scanner to avoid SSR issues
+const QrScanner = dynamic(() => import('qr-scanner'), { ssr: false });
 
 interface DelegationWithDetails extends Delegation {
   room_members?: {
@@ -35,6 +39,23 @@ export default function Dashboard() {
     isOpen: false,
     delegation: null,
   });
+  const [scanModal, setScanModal] = useState<{
+    isOpen: boolean;
+    delegation: DelegationWithDetails | null;
+  }>({
+    isOpen: false,
+    delegation: null,
+  });
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState('');
+  const [scannedPaymentData, setScannedPaymentData] = useState<{
+    chain: string;
+    token: string;
+    amount: string;
+    recipient: string;
+  } | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const qrScannerRef = useRef<any>(null);
 
   useEffect(() => {
     loadSessionAccount();
@@ -47,6 +68,16 @@ export default function Dashboard() {
       setDelegations([]);
     }
   }, [smartAccountAddress]);
+
+  // Cleanup QR scanner on unmount
+  useEffect(() => {
+    return () => {
+      if (qrScannerRef.current) {
+        qrScannerRef.current.stop();
+        qrScannerRef.current.destroy();
+      }
+    };
+  }, []);
 
   const loadSessionAccount = () => {
     if (typeof window === 'undefined') {
@@ -82,6 +113,97 @@ export default function Dashboard() {
     } finally {
       setLoadingDelegations(false);
     }
+  };
+
+  const handleScanAndPay = (delegation: DelegationWithDetails) => {
+    // Open the scan modal first
+    setScanModal({ isOpen: true, delegation });
+    setScanning(false);
+    setScanError('');
+    setScannedPaymentData(null);
+  };
+
+  const startScanning = async (delegation: DelegationWithDetails) => {
+    if (!videoRef.current) {
+      setScanError('Video element not available');
+      return;
+    }
+
+    try {
+      setScanError('');
+      setScanning(true);
+
+      // Import QrScanner dynamically
+      const QrScanner = (await import('qr-scanner')).default;
+
+      // Create QR scanner instance
+      const qrScanner = new QrScanner(
+        videoRef.current,
+        (result) => {
+          try {
+            const parsed = JSON.parse(result.data) as {
+              chain: string;
+              token: string;
+              amount: string;
+              recipient: string;
+            };
+            
+            // Verify the scanned payment matches the delegation
+            const tokenMatches = delegation.token_address.toLowerCase() === 
+              (parsed.token === 'USDC' ? '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238' : '').toLowerCase();
+            const recipientMatches = delegation.room_members?.rooms?.owner_address?.toLowerCase() === 
+              parsed.recipient.toLowerCase();
+
+            if (!tokenMatches || !recipientMatches) {
+              setScanError(
+                `Scanned payment doesn't match this delegation. ` +
+                `Expected: ${delegation.room_members?.rooms?.owner_address?.slice(0, 10)}..., ` +
+                `Got: ${parsed.recipient.slice(0, 10)}...`
+              );
+              qrScanner.stop();
+              return;
+            }
+
+            setScannedPaymentData(parsed);
+            setScanning(false);
+            qrScanner.stop();
+            qrScanner.destroy();
+            qrScannerRef.current = null;
+            
+            // Close scan modal but keep delegation for payment details modal
+            // The payment details modal will show, then user can click "Pay Now"
+            setScanModal({ isOpen: false, delegation: delegation });
+          } catch (err) {
+            setScanError('Invalid QR code format. Please scan a valid payment QR code.');
+            qrScanner.stop();
+          }
+        },
+        {
+          returnDetailedScanResult: true,
+          highlightScanRegion: true,
+          highlightCodeOutline: true,
+        }
+      );
+
+      qrScannerRef.current = qrScanner;
+      await qrScanner.start();
+    } catch (err: any) {
+      console.error('Error starting QR scanner:', err);
+      setScanError(err.message || 'Failed to start camera. Please check permissions.');
+      setScanning(false);
+    }
+  };
+
+  const stopScanning = () => {
+    if (qrScannerRef.current) {
+      qrScannerRef.current.stop();
+      qrScannerRef.current.destroy();
+      qrScannerRef.current = null;
+    }
+    setScanning(false);
+    setScanModal({ isOpen: false, delegation: null });
+    setScanError('');
+    setScannedPaymentData(null);
   };
 
   const formatPeriodDuration = (seconds: number) => {
@@ -342,8 +464,8 @@ export default function Dashboard() {
                         Created: {new Date(delegation.created_at).toLocaleString()}
                       </div>
 
-                      {/* Pay Button */}
-                      <div className="pt-4">
+                      {/* Pay Buttons */}
+                      <div className="pt-4 flex gap-3">
                         <button
                           onClick={() => {
                             setPaymentModal({
@@ -351,9 +473,15 @@ export default function Dashboard() {
                               delegation: delegation,
                             });
                           }}
-                          className="w-full rounded-lg bg-green-600 px-4 py-3 font-medium text-white transition-colors hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
+                          className="flex-1 rounded-lg bg-green-600 px-4 py-3 font-medium text-white transition-colors hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
                         >
                           Pay
+                        </button>
+                        <button
+                          onClick={() => handleScanAndPay(delegation)}
+                          className="flex-1 rounded-lg border border-green-600 bg-white px-4 py-3 font-medium text-green-600 transition-colors hover:bg-green-50 dark:border-green-500 dark:bg-zinc-800 dark:text-green-400 dark:hover:bg-zinc-700"
+                        >
+                          Scan & Pay
                         </button>
                       </div>
                     </div>
@@ -368,11 +496,168 @@ export default function Dashboard() {
       {paymentModal.delegation && (
         <PaymentModal
           isOpen={paymentModal.isOpen}
-          onClose={() =>
-            setPaymentModal({ isOpen: false, delegation: null })
-          }
+          onClose={() => {
+            setPaymentModal({ isOpen: false, delegation: null });
+            setScannedPaymentData(null);
+          }}
           delegation={paymentModal.delegation}
+          defaultRecipient={scannedPaymentData?.recipient}
+          defaultAmount={scannedPaymentData?.amount}
         />
+      )}
+
+      {/* Scan Modal */}
+      {scanModal.isOpen && scanModal.delegation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-2xl font-semibold text-black dark:text-zinc-50">
+                Scan QR Code
+              </h2>
+              <button
+                onClick={stopScanning}
+                className="rounded-lg p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+              >
+                ✕
+              </button>
+            </div>
+
+            {scanError && (
+              <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400">
+                {scanError}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div className="relative bg-black rounded-lg overflow-hidden" style={{ minHeight: '300px' }}>
+                <video
+                  ref={videoRef}
+                  className="w-full h-full object-cover"
+                  style={{ minHeight: '300px', maxHeight: '400px' }}
+                  playsInline
+                />
+                {scanning && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="border-2 border-white rounded-lg w-64 h-64 shadow-lg"></div>
+                  </div>
+                )}
+                {!scanning && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-zinc-900">
+                    <p className="text-white">Camera not started</p>
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-3">
+                {!scanning ? (
+                  <button
+                    onClick={() => {
+                      if (scanModal.delegation) {
+                        startScanning(scanModal.delegation);
+                      }
+                    }}
+                    className="flex-1 rounded-lg bg-black px-4 py-3 font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200"
+                  >
+                    Start Camera
+                  </button>
+                ) : (
+                  <button
+                    onClick={stopScanning}
+                    className="flex-1 rounded-lg border border-zinc-300 bg-white px-4 py-3 font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                  >
+                    Stop Scanning
+                  </button>
+                )}
+                <button
+                  onClick={stopScanning}
+                  className="flex-1 rounded-lg border border-zinc-300 bg-white px-4 py-3 font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Details Modal (after scanning) */}
+      {scannedPaymentData && scanModal.delegation && !scanModal.isOpen && !paymentModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-2xl font-semibold text-black dark:text-zinc-50">
+                Payment Details
+              </h2>
+              <button
+                onClick={() => {
+                  setScannedPaymentData(null);
+                  setScanModal({ isOpen: false, delegation: null });
+                }}
+                className="rounded-lg p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 p-6">
+                <h3 className="text-lg font-semibold text-black dark:text-zinc-50 mb-4">
+                  Receiver Details
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-600 dark:text-zinc-400">Chain:</span>
+                    <span className="font-medium text-black dark:text-white capitalize">
+                      {scannedPaymentData.chain}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-600 dark:text-zinc-400">Token:</span>
+                    <span className="font-medium text-black dark:text-white">
+                      {scannedPaymentData.token}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-600 dark:text-zinc-400">Amount:</span>
+                    <span className="font-medium text-black dark:text-white">
+                      {scannedPaymentData.amount} {scannedPaymentData.token}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-start">
+                    <span className="text-zinc-600 dark:text-zinc-400">Recipient:</span>
+                    <span className="font-mono text-sm text-black dark:text-white text-right break-all">
+                      {scannedPaymentData.recipient}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setScannedPaymentData(null);
+                    setScanModal({ isOpen: false, delegation: null });
+                  }}
+                  className="flex-1 rounded-lg border border-zinc-300 bg-white px-4 py-3 font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setPaymentModal({
+                      isOpen: true,
+                      delegation: scanModal.delegation!,
+                    });
+                    setScannedPaymentData(null);
+                    setScanModal({ isOpen: false, delegation: null });
+                  }}
+                  className="flex-1 rounded-lg bg-black px-4 py-3 font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200"
+                >
+                  Pay Now
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
