@@ -30,6 +30,12 @@ export default function Home() {
             >
               My Rooms
             </Link>
+            <Link
+              href="/dashboard"
+              className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black px-8 transition-colors hover:bg-black hover:text-white dark:border-white dark:hover:bg-white dark:hover:text-black sm:w-auto"
+            >
+              My Delegations
+            </Link>
           </div>
         </div>
       </main>

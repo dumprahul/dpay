@@ -42,7 +42,7 @@ export async function getDelegationsWithDetails(walletAddress: string) {
     .from('delegations')
     .select(`
       *,
-      room_members (
+      room_members!inner (
         id,
         wallet_address,
         room_id,
