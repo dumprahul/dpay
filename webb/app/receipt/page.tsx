@@ -4,15 +4,11 @@ import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 
 interface PaymentData {
-  chain: string;
-  token: string;
-  amount: string;
   recipient: string;
+  amount: string;
 }
 
 export default function ReceiptPage() {
-  const [chain, setChain] = useState('sepolia');
-  const [token, setToken] = useState('USDC');
   const [amount, setAmount] = useState('');
   const [recipient, setRecipient] = useState('');
   const [qrData, setQrData] = useState<string | null>(null);
@@ -32,12 +28,10 @@ export default function ReceiptPage() {
 
     setError('');
 
-    // Create payment data object
+    // Create payment data object - only recipient and amount
     const paymentData: PaymentData = {
-      chain,
-      token,
-      amount,
       recipient: recipient.trim(),
+      amount,
     };
 
     // Encode as JSON string for QR code
@@ -73,39 +67,6 @@ export default function ReceiptPage() {
           )}
 
           <div className="space-y-4">
-            {/* Chain Selection */}
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                Chain
-              </label>
-              <select
-                value={chain}
-                onChange={(e) => setChain(e.target.value)}
-                className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-black focus:border-black focus:outline-none focus:ring-2 focus:ring-black dark:border-zinc-700 dark:bg-zinc-800 dark:text-white dark:focus:border-white dark:focus:ring-white"
-              >
-                <option value="sepolia">Sepolia (Testnet)</option>
-                <option value="ethereum">Ethereum (Mainnet)</option>
-                <option value="polygon">Polygon</option>
-                <option value="base">Base</option>
-              </select>
-            </div>
-
-            {/* Token Selection */}
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                Token
-              </label>
-              <select
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-black focus:border-black focus:outline-none focus:ring-2 focus:ring-black dark:border-zinc-700 dark:bg-zinc-800 dark:text-white dark:focus:border-white dark:focus:ring-white"
-              >
-                <option value="USDC">USDC</option>
-                <option value="USDT">USDT</option>
-                <option value="DAI">DAI</option>
-              </select>
-            </div>
-
             {/* Amount */}
             <div>
               <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
@@ -162,9 +123,7 @@ export default function ReceiptPage() {
                   </button>
                   <div className="text-xs text-zinc-500 dark:text-zinc-500 text-center max-w-md">
                     <p className="font-medium mb-1">Payment Details:</p>
-                    <p>Chain: {chain}</p>
-                    <p>Token: {token}</p>
-                    <p>Amount: {amount}</p>
+                    <p>Amount: {amount} USDC</p>
                     <p className="font-mono break-all">Recipient: {recipient}</p>
                   </div>
                 </div>

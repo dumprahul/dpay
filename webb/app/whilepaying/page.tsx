@@ -11,10 +11,8 @@ import { getDelegationsWithDetails } from '@/lib/delegations';
 const QrScanner = dynamic(() => import('qr-scanner'), { ssr: false });
 
 interface PaymentData {
-  chain: string;
-  token: string;
-  amount: string;
   recipient: string;
+  amount: string;
 }
 
 export default function WhilePayingPage() {
@@ -33,7 +31,15 @@ export default function WhilePayingPage() {
       try {
         const decoded = decodeURIComponent(dataParam);
         const parsed = JSON.parse(decoded) as PaymentData;
-        setPaymentData(parsed);
+        // Handle both old format (with chain/token) and new format (only recipient/amount)
+        if (parsed.recipient && parsed.amount) {
+          setPaymentData({
+            recipient: parsed.recipient,
+            amount: parsed.amount,
+          });
+        } else {
+          setError('Invalid payment data in URL');
+        }
       } catch (err) {
         setError('Invalid payment data in URL');
       }
@@ -217,21 +223,9 @@ export default function WhilePayingPage() {
                 </h2>
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-zinc-600 dark:text-zinc-400">Chain:</span>
-                    <span className="font-medium text-black dark:text-white capitalize">
-                      {paymentData.chain}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-600 dark:text-zinc-400">Token:</span>
-                    <span className="font-medium text-black dark:text-white">
-                      {paymentData.token}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
                     <span className="text-zinc-600 dark:text-zinc-400">Amount:</span>
                     <span className="font-medium text-black dark:text-white">
-                      {paymentData.amount} {paymentData.token}
+                      {paymentData.amount} USDC
                     </span>
                   </div>
                   <div className="flex justify-between items-start">

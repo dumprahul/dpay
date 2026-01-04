@@ -49,8 +49,6 @@ export default function Dashboard() {
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState('');
   const [scannedPaymentData, setScannedPaymentData] = useState<{
-    chain: string;
-    token: string;
     amount: string;
     recipient: string;
   } | null>(null);
@@ -142,24 +140,27 @@ export default function Dashboard() {
         (result) => {
           try {
             const parsed = JSON.parse(result.data) as {
-              chain: string;
-              token: string;
-              amount: string;
               recipient: string;
+              amount: string;
             };
             
-            // Verify the scanned payment matches the delegation
-            const tokenMatches = delegation.token_address.toLowerCase() === 
-              (parsed.token === 'USDC' ? '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238' : '').toLowerCase();
-            const recipientMatches = delegation.room_members?.rooms?.owner_address?.toLowerCase() === 
-              parsed.recipient.toLowerCase();
+            // Validate the parsed data has required fields
+            if (!parsed.recipient || !parsed.amount) {
+              setScanError('Invalid QR code format. Missing recipient or amount.');
+              qrScanner.stop();
+              return;
+            }
 
-            if (!tokenMatches || !recipientMatches) {
-              setScanError(
-                `Scanned payment doesn't match this delegation. ` +
-                `Expected: ${delegation.room_members?.rooms?.owner_address?.slice(0, 10)}..., ` +
-                `Got: ${parsed.recipient.slice(0, 10)}...`
-              );
+            // Validate recipient address format
+            if (!parsed.recipient.startsWith('0x') || parsed.recipient.length !== 42) {
+              setScanError('Invalid recipient address format in QR code.');
+              qrScanner.stop();
+              return;
+            }
+
+            // Validate amount
+            if (isNaN(parseFloat(parsed.amount)) || parseFloat(parsed.amount) <= 0) {
+              setScanError('Invalid amount in QR code.');
               qrScanner.stop();
               return;
             }
@@ -171,7 +172,7 @@ export default function Dashboard() {
             qrScannerRef.current = null;
             
             // Close scan modal but keep delegation for payment details modal
-            // The payment details modal will show, then user can click "Pay Now"
+            // The payment details modal will show receiver details
             setScanModal({ isOpen: false, delegation: delegation });
           } catch (err) {
             setScanError('Invalid QR code format. Please scan a valid payment QR code.');
@@ -605,21 +606,9 @@ export default function Dashboard() {
                 </h3>
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-zinc-600 dark:text-zinc-400">Chain:</span>
-                    <span className="font-medium text-black dark:text-white capitalize">
-                      {scannedPaymentData.chain}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-600 dark:text-zinc-400">Token:</span>
-                    <span className="font-medium text-black dark:text-white">
-                      {scannedPaymentData.token}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
                     <span className="text-zinc-600 dark:text-zinc-400">Amount:</span>
                     <span className="font-medium text-black dark:text-white">
-                      {scannedPaymentData.amount} {scannedPaymentData.token}
+                      {scannedPaymentData.amount} USDC
                     </span>
                   </div>
                   <div className="flex justify-between items-start">
