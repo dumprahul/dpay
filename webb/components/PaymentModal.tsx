@@ -24,6 +24,8 @@ interface PaymentModalProps {
       };
     };
   };
+  defaultRecipient?: string;
+  defaultAmount?: string;
 }
 
 // USDC address on Ethereum Sepolia
@@ -33,9 +35,11 @@ export default function PaymentModal({
   isOpen,
   onClose,
   delegation,
+  defaultRecipient,
+  defaultAmount,
 }: PaymentModalProps) {
-  const [recipientAddress, setRecipientAddress] = useState('');
-  const [amount, setAmount] = useState('');
+  const [recipientAddress, setRecipientAddress] = useState(defaultRecipient || '');
+  const [amount, setAmount] = useState(defaultAmount || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
