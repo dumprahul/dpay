@@ -1,4 +1,4 @@
-const GRAPHQL_ENDPOINT = 'https://indexer.dev.hyperindex.xyz/4d64de1/v1/graphql';
+const GRAPHQL_ENDPOINT = 'https://indexer.dev.hyperindex.xyz/7422293/v1/graphql';
 const CHAIN_ID = 11155111; // Sepolia
 
 export interface Vault {

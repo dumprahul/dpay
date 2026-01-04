@@ -21,6 +21,7 @@ interface DelegationWithDetails extends Delegation {
       id: string;
       room_name: string;
       owner_address: string;
+      owner_wallet_address?: string;
     };
   };
 }
@@ -313,10 +314,10 @@ export default function Dashboard() {
           </div>
 
           {/* Member Analytics - Show spending data from indexer */}
-          {delegations.length > 0 && delegations[0]?.room_members?.rooms?.owner_address && (
+          {delegations.length > 0 && delegations[0]?.room_members?.rooms && (
             <MemberAnalytics
               chainId={CHAIN_ID}
-              vaultAddress={delegations[0].room_members.rooms.owner_address}
+              vaultAddress={delegations[0].room_members.rooms.owner_wallet_address || delegations[0].room_members.rooms.owner_address}
               memberAddress={smartAccountAddress}
             />
           )}

@@ -49,7 +49,8 @@ export async function getDelegationsWithDetails(walletAddress: string) {
         rooms (
           id,
           room_name,
-          owner_address
+          owner_address,
+          owner_wallet_address
         )
       )
     `)

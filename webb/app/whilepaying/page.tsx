@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import PaymentModal from '@/components/PaymentModal';
 import { getStoredSessionAccount } from '@/lib/session-account';
@@ -12,7 +12,7 @@ interface PaymentData {
   amount: string;
 }
 
-export default function WhilePayingPage() {
+function WhilePayingContent() {
   const searchParams = useSearchParams();
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -267,6 +267,20 @@ export default function WhilePayingPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function WhilePayingPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-zinc-50 to-zinc-100 dark:from-zinc-900 dark:to-zinc-800 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-pulse text-zinc-600 dark:text-zinc-400">Loading...</div>
+        </div>
+      </div>
+    }>
+      <WhilePayingContent />
+    </Suspense>
   );
 }
 

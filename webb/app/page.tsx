@@ -42,12 +42,6 @@ export default function Home() {
             >
               Create Receipt
             </Link>
-            <Link
-              href="/whilepaying"
-              className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black px-8 transition-colors hover:bg-black hover:text-white dark:border-white dark:hover:bg-white dark:hover:text-black sm:w-auto"
-            >
-              Scan & Pay
-            </Link>
           </div>
         </div>
       </main>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-const GRAPHQL_ENDPOINT = 'https://indexer.dev.hyperindex.xyz/4d64de1/v1/graphql';
+const GRAPHQL_ENDPOINT = 'https://indexer.dev.hyperindex.xyz/7422293/v1/graphql';
 const CHAIN_ID = 11155111; // Sepolia
 
 async function graphqlRequest(query: string, variables?: Record<string, any>) {
@@ -44,7 +44,13 @@ export async function POST(request: NextRequest) {
     }
 
     // First, verify the member exists in Supabase
-    const { data: memberData, error: memberError } = await supabase
+    // Check both owner_address and owner_wallet_address to handle both cases
+    // Try owner_wallet_address first (preferred), then fallback to owner_address
+    let memberData = null;
+    let memberError = null;
+    
+    // Try with owner_wallet_address first
+    const { data: data1, error: error1 } = await supabase
       .from('room_members')
       .select(`
         id,
@@ -60,12 +66,40 @@ export async function POST(request: NextRequest) {
       .eq('wallet_address', memberAddress.toLowerCase())
       .eq('rooms.owner_wallet_address', vaultAddress.toLowerCase())
       .limit(1)
-      .single();
+      .maybeSingle();
+
+    if (data1 && !error1) {
+      memberData = data1;
+    } else {
+      // Fallback to owner_address
+      const { data: data2, error: error2 } = await supabase
+        .from('room_members')
+        .select(`
+          id,
+          wallet_address,
+          room_id,
+          rooms!inner (
+            id,
+            room_name,
+            owner_address,
+            owner_wallet_address
+          )
+        `)
+        .eq('wallet_address', memberAddress.toLowerCase())
+        .eq('rooms.owner_address', vaultAddress.toLowerCase())
+        .limit(1)
+        .maybeSingle();
+      
+      memberData = data2;
+      memberError = error2;
+    }
 
     if (memberError || !memberData) {
+      // Don't log as error - member might not have any spending activity yet
+      // Return success with null member so frontend can handle gracefully
       return NextResponse.json(
-        { error: 'Member not found in this vault', member: null },
-        { status: 404 }
+        { success: true, member: null, roomMember: null },
+        { status: 200 }
       );
     }
 
@@ -107,19 +141,27 @@ export async function POST(request: NextRequest) {
       }
     `;
 
-    const graphqlData = await graphqlRequest(query, { memberId });
-    const member = graphqlData.Member_by_pk || null;
+    let member = null;
+    try {
+      const graphqlData = await graphqlRequest(query, { memberId });
+      member = graphqlData.Member_by_pk || null;
 
-    // Sort spends by timestamp descending if they exist
-    if (member && member.spends) {
-      member.spends.sort((a: any, b: any) => {
-        const timestampA = BigInt(a.timestamp || '0');
-        const timestampB = BigInt(b.timestamp || '0');
-        return timestampA > timestampB ? -1 : timestampA < timestampB ? 1 : 0;
-      });
+      // Sort spends by timestamp descending if they exist
+      if (member && member.spends) {
+        member.spends.sort((a: any, b: any) => {
+          const timestampA = BigInt(a.timestamp || '0');
+          const timestampB = BigInt(b.timestamp || '0');
+          return timestampA > timestampB ? -1 : timestampA < timestampB ? 1 : 0;
+        });
+      }
+    } catch (graphqlError: any) {
+      // If GraphQL query fails or member not found in indexer, that's okay
+      // Member might not have any spending activity yet
+      console.log('Member not found in indexer (no spending activity yet):', memberId);
+      member = null;
     }
 
-    // Combine Supabase member data with GraphQL member data
+    // Return success even if member is null (no spending activity yet)
     return NextResponse.json({
       success: true,
       member,

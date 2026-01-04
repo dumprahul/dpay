@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-const GRAPHQL_ENDPOINT = 'https://indexer.dev.hyperindex.xyz/4d64de1/v1/graphql';
+const GRAPHQL_ENDPOINT = 'https://indexer.dev.hyperindex.xyz/7422293/v1/graphql';
 const CHAIN_ID = 11155111; // Sepolia
 
 async function graphqlRequest(query: string, variables?: Record<string, any>) {
