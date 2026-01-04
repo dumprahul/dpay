@@ -174,9 +174,13 @@ export default function Dashboard() {
             qrScanner.destroy();
             qrScannerRef.current = null;
             
-            // Close scan modal but keep delegation for payment details modal
-            // The payment details modal will show receiver details
-            setScanModal({ isOpen: false, delegation: delegation });
+            // Close scan modal and automatically open payment modal with scanned data
+            // The payment will be executed automatically
+            setScanModal({ isOpen: false, delegation: null });
+            setPaymentModal({
+              isOpen: true,
+              delegation: delegation,
+            });
           } catch (err) {
             setScanError('Invalid QR code format. Please scan a valid payment QR code.');
             qrScanner.stop();
@@ -592,74 +596,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Payment Details Modal (after scanning) */}
-      {scannedPaymentData && scanModal.delegation && !scanModal.isOpen && !paymentModal.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-2xl font-semibold text-black dark:text-zinc-50">
-                Payment Details
-              </h2>
-              <button
-                onClick={() => {
-                  setScannedPaymentData(null);
-                  setScanModal({ isOpen: false, delegation: null });
-                }}
-                className="rounded-lg p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 p-6">
-                <h3 className="text-lg font-semibold text-black dark:text-zinc-50 mb-4">
-                  Receiver Details
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-zinc-600 dark:text-zinc-400">Amount:</span>
-                    <span className="font-medium text-black dark:text-white">
-                      {scannedPaymentData.amount} USDC
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-start">
-                    <span className="text-zinc-600 dark:text-zinc-400">Recipient:</span>
-                    <span className="font-mono text-sm text-black dark:text-white text-right break-all">
-                      {scannedPaymentData.recipient}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setScannedPaymentData(null);
-                    setScanModal({ isOpen: false, delegation: null });
-                  }}
-                  className="flex-1 rounded-lg border border-zinc-300 bg-white px-4 py-3 font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    setPaymentModal({
-                      isOpen: true,
-                      delegation: scanModal.delegation!,
-                    });
-                    setScannedPaymentData(null);
-                    setScanModal({ isOpen: false, delegation: null });
-                  }}
-                  className="flex-1 rounded-lg bg-black px-4 py-3 font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200"
-                >
-                  Pay Now
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

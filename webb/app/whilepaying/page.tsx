@@ -135,18 +135,17 @@ export default function WhilePayingPage() {
     }
 
     // Find a delegation that matches the payment requirements
-    // Look for a delegation with the same token and recipient (owner)
+    // Look for a delegation with the same recipient (owner)
+    // We'll let the user select which delegation to use in the PaymentModal
     const matchingDelegation = delegations.find((del) => {
-      const tokenMatches = del.token_address.toLowerCase() === 
-        (paymentData.token === 'USDC' ? '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238' : '').toLowerCase();
       const recipientMatches = del.room_members?.rooms?.owner_address?.toLowerCase() === 
         paymentData.recipient.toLowerCase();
-      return tokenMatches && recipientMatches;
+      return recipientMatches;
     });
 
     if (!matchingDelegation) {
       setError(
-        `No delegation found for ${paymentData.token} payments to ${paymentData.recipient.slice(0, 10)}... ` +
+        `No delegation found for payments to ${paymentData.recipient.slice(0, 10)}... ` +
         'Please ensure you have a delegation from this recipient.'
       );
       return;
