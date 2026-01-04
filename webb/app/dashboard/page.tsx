@@ -7,7 +7,10 @@ import { supabase } from '@/lib/supabase';
 import { getStoredSessionAccount } from '@/lib/session-account';
 import { getDelegationsWithDetails } from '@/lib/delegations';
 import PaymentModal from '@/components/PaymentModal';
+import MemberAnalytics from '@/components/MemberAnalytics';
 import type { Delegation } from '@/lib/database.types';
+
+const CHAIN_ID = 11155111; // Sepolia
 
 // Dynamically import QR scanner to avoid SSR issues
 const QrScanner = dynamic(() => import('qr-scanner'), { ssr: false });
@@ -307,6 +310,15 @@ export default function Dashboard() {
               Join Room
             </Link>
           </div>
+
+          {/* Member Analytics - Show spending data from indexer */}
+          {delegations.length > 0 && delegations[0]?.room_members?.rooms?.owner_address && (
+            <MemberAnalytics
+              chainId={CHAIN_ID}
+              vaultAddress={delegations[0].room_members.rooms.owner_address}
+              memberAddress={smartAccountAddress}
+            />
+          )}
 
           <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <div className="mb-6">

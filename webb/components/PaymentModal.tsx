@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { createPublicClient, http, parseUnits, type Address, encodeFunctionData, erc20Abi } from 'viem';
+import { createPublicClient, createWalletClient, http, parseUnits, type Address, encodeFunctionData, erc20Abi } from 'viem';
 import { createBundlerClient } from 'viem/account-abstraction';
 import { erc7710BundlerActions } from '@metamask/smart-accounts-kit/actions';
-import { sepolia as chain } from 'viem/chains';
+import { sepolia, mainnet, base, optimism } from 'viem/chains';
 import { getStoredSessionAccount } from '@/lib/session-account';
 import { privateKeyToAccount } from 'viem/accounts';
 import { toMetaMaskSmartAccount, Implementation } from '@metamask/smart-accounts-kit';
+import { acrossSwap, CHAIN_IDS, USDC_ADDRESSES } from '@/lib/swap';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -40,10 +41,12 @@ export default function PaymentModal({
 }: PaymentModalProps) {
   const [recipientAddress, setRecipientAddress] = useState(defaultRecipient || '');
   const [amount, setAmount] = useState(defaultAmount || '');
+  const [destinationChain, setDestinationChain] = useState<number>(CHAIN_IDS.ETH_SEPOLIA);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
+  const [step, setStep] = useState<'delegating' | 'swapping' | 'complete'>('delegating');
 
   if (!isOpen) return null;
 
@@ -68,6 +71,7 @@ export default function PaymentModal({
 
     setLoading(true);
     setError('');
+    setStep('delegating');
 
     try {
       // Get session account from localStorage
@@ -81,33 +85,27 @@ export default function PaymentModal({
       
       console.log('=== Session Account Details ===');
       console.log('Session EOA:', sessionAccount.address);
-      console.log('Smart Account (sessionAccount):', sessionAccount.smartAccountAddress);
-      console.log('Delegator (delegation_manager):', delegator);
+      console.log('Smart Account:', sessionAccount.smartAccountAddress);
+      console.log('Delegator:', delegator);
+      console.log('Destination Chain:', destinationChain);
 
       // Create account from private key stored in localStorage
-      // This account will be used to sign the transaction
       const signerAccount = privateKeyToAccount(sessionAccount.privateKey);
-      console.log('Signer Account (from private key):', signerAccount.address);
-      console.log('Using private key from localStorage for signing - NO MetaMask needed');
+      const eoaAddress = signerAccount.address;
 
       // Pimlico RPC URL (for sending transactions - bundler endpoint)
       const pimlicoRpcUrl = 'https://api.pimlico.io/v2/11155111/rpc?apikey=pim_VNHD6e2J4JXxm3S1aPN4Sh';
       
-      // Standard RPC URL for reading chain data (nonce, gas price, etc.)
-      // Pimlico is a bundler and doesn't support standard RPC methods like eth_getTransactionCount
-      // So we use Alchemy for reading chain data
+      // Standard RPC URL for reading chain data
       const standardRpcUrl = 'https://eth-sepolia.g.alchemy.com/v2/7cPpN-HuMIH9Kjen8uysX';
 
-      // Create public client for reading chain data (nonce, gas price, etc.)
-      // Use standard RPC endpoint (Alchemy) for these operations
+      // Create public client for Sepolia
       const publicClient = createPublicClient({
-        chain,
+        chain: sepolia,
         transport: http(standardRpcUrl),
       });
 
-      // Recreate the Smart Account from the stored session account data
-      // The Smart Account was already created when the member joined the room
-      // We just need to recreate the smart account object using the same parameters
+      // Recreate the Smart Account
       const smartAccount = await toMetaMaskSmartAccount({
         client: publicClient,
         implementation: Implementation.Hybrid,
@@ -116,52 +114,25 @@ export default function PaymentModal({
         signer: { account: signerAccount },
       });
 
-      console.log('Smart Account recreated:', smartAccount.address);
-      console.log('Smart Account matches stored:', smartAccount.address.toLowerCase() === sessionAccount.smartAccountAddress.toLowerCase());
-      
-      // Verify the smart account address matches what's stored
       if (smartAccount.address.toLowerCase() !== sessionAccount.smartAccountAddress.toLowerCase()) {
         throw new Error('Smart Account address mismatch. Please rejoin the room to regenerate your session account.');
       }
 
-      // Create bundler client for ERC-7710 delegation transactions
-      // Using Pimlico bundler endpoint with paymaster support
+      // Create bundler client
       const bundlerClient = createBundlerClient({
         client: publicClient,
         transport: http(pimlicoRpcUrl),
-        paymaster: true, // Allows you to use the same Bundler Client as paymaster
+        paymaster: true,
       }).extend(erc7710BundlerActions());
 
-      // Encode ERC20 transfer function call
-      // USDC on Sepolia: 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
-      const calldata = encodeFunctionData({
-        abi: erc20Abi,
-        args: [recipientAddress as Address, parseUnits(amount, 6)], // USDC has 6 decimals
-        functionName: 'transfer',
-      });
-
-      console.log('=== Sending Transaction with Delegation ===');
-      console.log('Token Address (USDC Sepolia):', delegation.token_address);
-      console.log('Recipient:', recipientAddress);
-      console.log('Amount:', amount, 'USDC');
-      console.log('Calldata:', calldata);
-      console.log('Session Account (Smart Account):', sessionAccount.smartAccountAddress);
-      console.log('Delegation Manager:', delegator);
-      console.log('Permissions Context length:', delegation.permissions_context.length);
-
-      // Prepare parameters for sendUserOperationWithDelegation
-      // These properties must be extracted from the permission response (stored in database)
       const permissionsContext = delegation.permissions_context as `0x${string}`;
       const delegationManager = delegator;
 
-      // Get gas prices for the user operation from Pimlico
-      // Pimlico requires using their gas price estimation method
-      console.log('=== Getting Gas Prices from Pimlico ===');
+      // Get gas prices from Pimlico
       let maxFeePerGas: bigint;
       let maxPriorityFeePerGas: bigint;
       
       try {
-        // Use Pimlico's gas price estimation
         const gasPriceResponse = await fetch(pimlicoRpcUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -176,82 +147,155 @@ export default function PaymentModal({
         const gasPriceData = await gasPriceResponse.json();
         
         if (gasPriceData.result) {
-          // Pimlico returns gas prices in wei
           maxFeePerGas = BigInt(gasPriceData.result.maxFeePerGas);
           maxPriorityFeePerGas = BigInt(gasPriceData.result.maxPriorityFeePerGas);
-          console.log('Pimlico Gas Prices:', {
-            maxFeePerGas: maxFeePerGas.toString(),
-            maxPriorityFeePerGas: maxPriorityFeePerGas.toString(),
-          });
         } else {
           throw new Error('Failed to get gas prices from Pimlico');
         }
       } catch (err: any) {
         console.warn('Failed to get gas prices from Pimlico, using fallback:', err);
-        // Fallback: use a higher gas price to ensure it's accepted
-        // The error said minimum is 1100009, so use at least that
-        maxFeePerGas = BigInt(2000000000); // 2 gwei (higher than minimum)
-        maxPriorityFeePerGas = BigInt(1000000000); // 1 gwei
+        maxFeePerGas = BigInt(2000000000);
+        maxPriorityFeePerGas = BigInt(1000000000);
       }
 
-      console.log('=== sendUserOperationWithDelegation Parameters ===');
-      console.log('Smart Account:', smartAccount.address);
-      console.log('to (Token Address):', delegation.token_address);
-      console.log('data (Calldata):', calldata);
-      console.log('data length:', calldata.length);
-      console.log('permissionsContext length:', permissionsContext.length);
-      console.log('permissionsContext (first 200 chars):', permissionsContext.slice(0, 200) + '...');
-      console.log('delegationManager:', delegationManager);
-      console.log('maxFeePerGas:', maxFeePerGas.toString());
-      console.log('maxPriorityFeePerGas:', maxPriorityFeePerGas.toString());
+      // Check if destination is ETH Sepolia
+      if (destinationChain === CHAIN_IDS.ETH_SEPOLIA) {
+        // Direct transfer from smart account to recipient (no swap, no EOA delegation needed)
+        console.log('=== Direct Transfer (ETH Sepolia - No Swap Needed) ===');
+        const directCalldata = encodeFunctionData({
+          abi: erc20Abi,
+          args: [recipientAddress as Address, parseUnits(amount, 6)],
+          functionName: 'transfer',
+        });
 
-      // Send user operation with delegation using bundler client
-      // Calls without permissionsContext and delegationManager will be executed as a normal user operation
-      console.log('=== Sending User Operation with Delegation ===');
-      console.log('The transaction will be signed with the private key from localStorage');
-      console.log('and sent as a user operation through the Pimlico bundler');
-      
-      const userOperationHash = await bundlerClient.sendUserOperationWithDelegation({
-        publicClient,
-        account: smartAccount, // Smart Account that has the delegated permissions
-        calls: [
+        const directUserOpHash = await bundlerClient.sendUserOperationWithDelegation({
+          publicClient,
+          account: smartAccount,
+          calls: [
+            {
+              to: delegation.token_address as Address,
+              data: directCalldata,
+              permissionsContext,
+              delegationManager,
+            },
+          ],
+          maxFeePerGas,
+          maxPriorityFeePerGas,
+        });
+
+        const directReceipt = await bundlerClient.waitForUserOperationReceipt({
+          hash: directUserOpHash,
+        });
+
+        console.log('=== Direct Transfer Complete ===');
+        setTxHash(directReceipt.receipt.transactionHash);
+        setSuccess(true);
+        setStep('complete');
+      } else {
+        // For other chains: First delegate to EOA, then swap
+        // STEP 1: Delegate amount from smart account to EOA
+        console.log('=== Step 1: Delegating from Smart Account to EOA ===');
+        const delegateCalldata = encodeFunctionData({
+          abi: erc20Abi,
+          args: [eoaAddress as Address, parseUnits(amount, 6)],
+          functionName: 'transfer',
+        });
+
+        const delegateUserOpHash = await bundlerClient.sendUserOperationWithDelegation({
+          publicClient,
+          account: smartAccount,
+          calls: [
+            {
+              to: delegation.token_address as Address,
+              data: delegateCalldata,
+              permissionsContext,
+              delegationManager,
+            },
+          ],
+          maxFeePerGas,
+          maxPriorityFeePerGas,
+        });
+
+        const delegateReceipt = await bundlerClient.waitForUserOperationReceipt({
+          hash: delegateUserOpHash,
+        });
+
+        console.log('=== Delegation to EOA Complete ===');
+        console.log('Transaction Hash:', delegateReceipt.receipt.transactionHash);
+
+        // STEP 2: Perform swap from EOA to recipient on destination chain
+        // Perform swap from EOA to recipient on destination chain
+        console.log('=== Step 2: Performing Swap ===');
+        setStep('swapping');
+
+        // Get the appropriate chain object
+        let destinationChainObj;
+        let destinationRpcUrl;
+        
+        switch (destinationChain) {
+          case CHAIN_IDS.ETH_MAINNET:
+            destinationChainObj = mainnet;
+            destinationRpcUrl = 'https://eth-mainnet.g.alchemy.com/v2/7cPpN-HuMIH9Kjen8uysX';
+            break;
+          case CHAIN_IDS.BASE_MAINNET:
+            destinationChainObj = base;
+            destinationRpcUrl = 'https://base-mainnet.g.alchemy.com/v2/7cPpN-HuMIH9Kjen8uysX';
+            break;
+          case CHAIN_IDS.OPTIMISM_MAINNET:
+            destinationChainObj = optimism;
+            destinationRpcUrl = 'https://opt-mainnet.g.alchemy.com/v2/7cPpN-HuMIH9Kjen8uysX';
+            break;
+          default:
+            throw new Error('Unsupported destination chain');
+        }
+
+        // Get token addresses
+        const originToken = USDC_ADDRESSES[CHAIN_IDS.ETH_SEPOLIA];
+        const destinationToken = USDC_ADDRESSES[destinationChain];
+        
+        if (!destinationToken) {
+          throw new Error(`Could not find USDC address for destination chain ${destinationChain}`);
+        }
+
+        // Create wallet and public clients for Sepolia (origin)
+        const originWalletClient = createWalletClient({
+          account: signerAccount,
+          chain: sepolia,
+          transport: http(standardRpcUrl),
+        });
+
+        const originPublicClient = createPublicClient({
+          chain: sepolia,
+          transport: http(standardRpcUrl),
+        });
+
+        // Perform swap
+        const swapTxHash = await acrossSwap(
+          originWalletClient,
+          originPublicClient,
           {
-            to: delegation.token_address as Address,
-            data: calldata,
-            permissionsContext,
-            delegationManager,
-          },
-        ],
-        // Appropriate values must be used for fee-per-gas
-        maxFeePerGas,
-        maxPriorityFeePerGas,
-      });
+            amount,
+            inputToken: originToken,
+            outputToken: destinationToken,
+            originChainId: CHAIN_IDS.ETH_SEPOLIA,
+            destinationChainId: destinationChain,
+            depositor: eoaAddress,
+            recipient: recipientAddress as Address,
+          }
+        );
 
-      console.log('=== User Operation Submitted ===');
-      console.log('User Operation Hash:', userOperationHash);
-      console.log('Waiting for user operation to be included in a transaction...');
+        // Wait for swap transaction
+        await originPublicClient.waitForTransactionReceipt({ hash: swapTxHash });
 
-      // Wait for the user operation to be included in a transaction
-      const receipt = await bundlerClient.waitForUserOperationReceipt({
-        hash: userOperationHash,
-      });
-
-      console.log('=== User Operation Receipt Received ===');
-      console.log('Transaction Hash:', receipt.receipt.transactionHash);
-      console.log('Block Number:', receipt.receipt.blockNumber);
-
-      // Get the transaction hash from the receipt
-      const transactionHash = receipt.receipt.transactionHash;
-
-      console.log('=== Transaction Successful ===');
-      console.log('Transaction Hash:', transactionHash);
-      console.log('View on Etherscan:', `https://sepolia.etherscan.io/tx/${transactionHash}`);
-      
-      setTxHash(transactionHash);
-      setSuccess(true);
+        console.log('=== Swap Complete ===');
+        setTxHash(swapTxHash);
+        setSuccess(true);
+        setStep('complete');
+      }
     } catch (err: any) {
       console.error('Error executing payment:', err);
       setError(err.message || 'Failed to execute payment. Please try again.');
+      setStep('delegating');
     } finally {
       setLoading(false);
     }
@@ -362,6 +406,44 @@ export default function PaymentModal({
                 Amount in USDC to transfer
               </p>
             </div>
+
+            <div>
+              <label
+                htmlFor="destinationChain"
+                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              >
+                Destination Chain
+              </label>
+              <select
+                id="destinationChain"
+                value={destinationChain}
+                onChange={(e) => setDestinationChain(Number(e.target.value))}
+                className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-black focus:border-black focus:outline-none focus:ring-2 focus:ring-black dark:border-zinc-700 dark:bg-zinc-800 dark:text-white dark:focus:border-white dark:focus:ring-white"
+                disabled={loading}
+              >
+                <option value={CHAIN_IDS.ETH_SEPOLIA}>Ethereum Sepolia</option>
+                <option value={CHAIN_IDS.ETH_MAINNET}>Ethereum Mainnet</option>
+                <option value={CHAIN_IDS.BASE_MAINNET}>Base Mainnet</option>
+                <option value={CHAIN_IDS.OPTIMISM_MAINNET}>Optimism Mainnet</option>
+              </select>
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">
+                {destinationChain === CHAIN_IDS.ETH_SEPOLIA 
+                  ? 'Direct transfer (no swap needed)' 
+                  : 'Will perform cross-chain swap'}
+              </p>
+            </div>
+
+            {loading && (
+              <div className="rounded-lg border border-zinc-300 bg-zinc-50 p-3 dark:border-zinc-600 dark:bg-zinc-800">
+                <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  {destinationChain === CHAIN_IDS.ETH_SEPOLIA 
+                    ? 'Sending payment directly...'
+                    : step === 'delegating' 
+                      ? 'Step 1/2: Delegating funds to your wallet...'
+                      : 'Step 2/2: Performing cross-chain swap...'}
+                </p>
+              </div>
+            )}
 
             <div className="rounded-lg border border-zinc-300 bg-zinc-50 p-3 dark:border-zinc-600 dark:bg-zinc-800">
               <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">

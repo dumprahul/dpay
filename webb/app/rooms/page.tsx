@@ -5,7 +5,10 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import WalletButton from '@/components/WalletButton';
 import DelegationModal from '@/components/DelegationModal';
+import VaultAnalytics from '@/components/VaultAnalytics';
 import type { Address } from 'viem';
+
+const CHAIN_ID = 11155111; // Sepolia
 
 interface RoomMember {
   id: string;
@@ -335,6 +338,14 @@ export default function Rooms() {
                             </p>
                           </div>
                         )}
+
+                        {/* Vault Analytics */}
+                        <div className="mt-6">
+                          <VaultAnalytics
+                            chainId={CHAIN_ID}
+                            vaultAddress={room.owner_address}
+                          />
+                        </div>
                       </div>
                       <button
                         onClick={() => copyInviteLink(room.invite_code)}
