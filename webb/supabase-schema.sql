@@ -20,15 +20,32 @@ CREATE TABLE IF NOT EXISTS room_members (
   UNIQUE(room_id, wallet_address)
 );
 
+-- Create delegations table
+CREATE TABLE IF NOT EXISTS delegations (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  room_member_id UUID NOT NULL REFERENCES room_members(id) ON DELETE CASCADE,
+  wallet_address TEXT NOT NULL,
+  permissions_context TEXT NOT NULL,
+  delegation_manager TEXT NOT NULL,
+  justification TEXT NOT NULL,
+  period_duration BIGINT NOT NULL,
+  start_time BIGINT NOT NULL,
+  token_address TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
+);
+
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_rooms_invite_code ON rooms(invite_code);
 CREATE INDEX IF NOT EXISTS idx_rooms_owner_wallet_address ON rooms(owner_wallet_address);
 CREATE INDEX IF NOT EXISTS idx_room_members_room_id ON room_members(room_id);
 CREATE INDEX IF NOT EXISTS idx_room_members_wallet_address ON room_members(wallet_address);
+CREATE INDEX IF NOT EXISTS idx_delegations_room_member_id ON delegations(room_member_id);
+CREATE INDEX IF NOT EXISTS idx_delegations_wallet_address ON delegations(wallet_address);
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE room_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE delegations ENABLE ROW LEVEL SECURITY;
 
 -- Drop existing policies if they exist
 DROP POLICY IF EXISTS "Allow public read access to rooms" ON rooms;
@@ -56,5 +73,18 @@ CREATE POLICY "Allow public read access to room_members" ON room_members
 
 -- Allow anyone to insert room members (for joining rooms)
 CREATE POLICY "Allow public insert access to room_members" ON room_members
+  FOR INSERT WITH CHECK (true);
+
+-- Drop existing policies if they exist for delegations
+DROP POLICY IF EXISTS "Allow public read access to delegations" ON delegations;
+DROP POLICY IF EXISTS "Allow public insert access to delegations" ON delegations;
+
+-- Create policies for delegations table
+-- Allow anyone to read delegations
+CREATE POLICY "Allow public read access to delegations" ON delegations
+  FOR SELECT USING (true);
+
+-- Allow anyone to insert delegations
+CREATE POLICY "Allow public insert access to delegations" ON delegations
   FOR INSERT WITH CHECK (true);
 

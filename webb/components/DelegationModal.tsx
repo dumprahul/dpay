@@ -4,12 +4,15 @@ import { useState } from 'react';
 import { createWalletClient, custom, parseUnits, type Address } from 'viem';
 import { erc7715ProviderActions } from '@metamask/smart-accounts-kit/actions';
 import { sepolia as chain } from 'viem/chains';
+import { supabase } from '@/lib/supabase';
 
 interface DelegationModalProps {
   isOpen: boolean;
   onClose: () => void;
   memberAddress: string;
   memberName?: string;
+  roomMemberId?: string;
+  roomId?: string;
 }
 
 // USDC address on Ethereum Sepolia
@@ -21,6 +24,8 @@ export default function DelegationModal({
   onClose,
   memberAddress,
   memberName,
+  roomMemberId,
+  roomId,
 }: DelegationModalProps) {
   const [amount, setAmount] = useState('');
   const [periodDuration, setPeriodDuration] = useState('');
@@ -101,6 +106,81 @@ export default function DelegationModal({
       ]);
 
       console.log('Granted Permissions:', grantedPermissions);
+      console.log('Granted Permissions (stringified):', JSON.stringify(grantedPermissions, null, 2));
+
+      // Save delegation data to database
+      if (grantedPermissions && grantedPermissions.length > 0) {
+        const permission = grantedPermissions[0];
+        
+        // Extract context from the permission
+        // The context is typically in the permission response
+        // Based on ERC-7715, context is usually at the top level or in permission.data
+        let permissionsContext = '';
+        
+        // Try different possible locations for the context
+        if ((permission as any).context) {
+          permissionsContext = (permission as any).context;
+        } else if ((permission as any).permissionsContext) {
+          permissionsContext = (permission as any).permissionsContext;
+        } else if ((permission as any).permission?.context) {
+          permissionsContext = (permission as any).permission.context;
+        } else if ((permission as any).data?.context) {
+          permissionsContext = (permission as any).data.context;
+        } else {
+          // If context is not found, log the structure and use a placeholder
+          console.warn('Context not found in permission structure:', permission);
+          permissionsContext = JSON.stringify(permission);
+        }
+        
+        console.log('Extracted permissions context:', permissionsContext);
+        
+        const startTime = currentTime;
+
+        // Get or create room_member_id
+        let finalRoomMemberId = roomMemberId;
+        
+        if (!finalRoomMemberId && roomId) {
+          // Find the room member by wallet address and room_id
+          const { data: memberData } = await supabase
+            .from('room_members')
+            .select('id')
+            .eq('room_id', roomId)
+            .eq('wallet_address', memberAddress.toLowerCase())
+            .single();
+          
+          if (memberData) {
+            finalRoomMemberId = memberData.id;
+          }
+        }
+
+        if (finalRoomMemberId) {
+          // Save delegation to database
+          const { error: delegationError } = await supabase
+            .from('delegations')
+            .insert([
+              {
+                room_member_id: finalRoomMemberId,
+                wallet_address: memberAddress.toLowerCase(),
+                permissions_context: permissionsContext,
+                delegation_manager: DELEGATION_MANAGER,
+                justification: justification,
+                period_duration: periodDurationSeconds,
+                start_time: startTime,
+                token_address: USDC_ADDRESS,
+              },
+            ]);
+
+          if (delegationError) {
+            console.error('Error saving delegation:', delegationError);
+            // Don't fail the whole operation if saving fails
+          } else {
+            console.log('Delegation saved successfully to database');
+          }
+        } else {
+          console.warn('Could not find room member ID, delegation not saved to database');
+        }
+      }
+
       setSuccess(true);
       setTimeout(() => {
         onClose();

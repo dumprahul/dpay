@@ -14,3 +14,16 @@ export interface RoomMember {
   joined_at: string;
 }
 
+export interface Delegation {
+  id: string;
+  room_member_id: string;
+  wallet_address: string;
+  permissions_context: string;
+  delegation_manager: string;
+  justification: string;
+  period_duration: number;
+  start_time: number;
+  token_address: string;
+  created_at: string;
+}
+

@@ -31,6 +31,8 @@ export default function Rooms() {
   const [delegationModal, setDelegationModal] = useState<{
     isOpen: boolean;
     memberAddress: string;
+    roomMemberId?: string;
+    roomId?: string;
   }>({
     isOpen: false,
     memberAddress: '',
@@ -300,6 +302,8 @@ export default function Rooms() {
                                         setDelegationModal({
                                           isOpen: true,
                                           memberAddress: member.wallet_address,
+                                          roomMemberId: member.id,
+                                          roomId: room.id,
                                         });
                                       }}
                                       className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
@@ -353,6 +357,8 @@ export default function Rooms() {
           setDelegationModal({ isOpen: false, memberAddress: '' })
         }
         memberAddress={delegationModal.memberAddress}
+        roomMemberId={delegationModal.roomMemberId}
+        roomId={delegationModal.roomId}
       />
     </div>
   );
