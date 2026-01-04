@@ -5,6 +5,7 @@
   --foreground: #171717;
 }
 
+/* @theme is a Tailwind CSS v4 feature */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

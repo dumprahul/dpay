@@ -190,7 +190,7 @@ export default function PaymentModal({
       const publicClient = createPublicClient({
         chain: originChainObj,
         transport: http(standardRpcUrl),
-      });
+      }) as any; // Type assertion to bypass viem type incompatibility
       
       console.log('Public client created for:', {
         chain: originChainObj.name,
@@ -367,7 +367,7 @@ export default function PaymentModal({
         let directUserOpHash;
         try {
           directUserOpHash = await bundlerClient.sendUserOperationWithDelegation({
-            publicClient,
+            publicClient: publicClient as any, // Type assertion to bypass viem type incompatibility
             account: smartAccount,
             calls: [
               {
@@ -443,7 +443,7 @@ export default function PaymentModal({
 
         console.log('Sending delegation user operation...');
         const delegateUserOpHash = await bundlerClient.sendUserOperationWithDelegation({
-          publicClient,
+          publicClient: publicClient as any, // Type assertion to bypass viem type incompatibility
           account: smartAccount,
           calls: [
             {
@@ -578,7 +578,7 @@ export default function PaymentModal({
             retryCount: 3,
             retryDelay: 1000,
           }),
-        });
+        }) as any; // Type assertion to bypass viem type incompatibility
         
         console.log('Clients created successfully');
 
@@ -598,7 +598,7 @@ export default function PaymentModal({
         
         const swapTxHash = await acrossSwap(
           originWalletClient,
-          originPublicClient,
+          originPublicClient as any, // Type assertion to bypass viem type incompatibility
           {
             amount,
             inputToken: originToken,

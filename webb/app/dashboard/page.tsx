@@ -2,18 +2,15 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
 import { getStoredSessionAccount } from '@/lib/session-account';
 import { getDelegationsWithDetails } from '@/lib/delegations';
 import PaymentModal from '@/components/PaymentModal';
 import MemberAnalytics from '@/components/MemberAnalytics';
 import type { Delegation } from '@/lib/database.types';
+import type QrScannerType from 'qr-scanner';
 
 const CHAIN_ID = 11155111; // Sepolia
-
-// Dynamically import QR scanner to avoid SSR issues
-const QrScanner = dynamic(() => import('qr-scanner'), { ssr: false });
 
 interface DelegationWithDetails extends Delegation {
   room_members?: {
@@ -56,7 +53,7 @@ export default function Dashboard() {
     recipient: string;
   } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const qrScannerRef = useRef<any>(null);
+  const qrScannerRef = useRef<QrScannerType | null>(null);
 
   useEffect(() => {
     loadSessionAccount();

@@ -2,13 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
-import dynamic from 'next/dynamic';
 import PaymentModal from '@/components/PaymentModal';
 import { getStoredSessionAccount } from '@/lib/session-account';
 import { getDelegationsWithDetails } from '@/lib/delegations';
-
-// Dynamically import QR scanner to avoid SSR issues
-const QrScanner = dynamic(() => import('qr-scanner'), { ssr: false });
+import type QrScannerType from 'qr-scanner';
 
 interface PaymentData {
   recipient: string;
@@ -22,7 +19,7 @@ export default function WhilePayingPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const qrScannerRef = useRef<QrScanner | null>(null);
+  const qrScannerRef = useRef<QrScannerType | null>(null);
 
   // Check if payment data is in URL params
   useEffect(() => {
