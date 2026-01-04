@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import AuthButton from '@/components/AuthButton';
+import WalletButton from '@/components/WalletButton';
 import DelegationModal from '@/components/DelegationModal';
-import type { User } from '@supabase/supabase-js';
+import type { Address } from 'viem';
 
 interface RoomMember {
   id: string;
@@ -23,7 +23,7 @@ interface Room {
 }
 
 export default function Rooms() {
-  const [user, setUser] = useState<User | null>(null);
+  const [walletAddress, setWalletAddress] = useState<Address | null>(null);
   const [loading, setLoading] = useState(true);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loadingRooms, setLoadingRooms] = useState(false);
@@ -37,53 +37,80 @@ export default function Rooms() {
   });
 
   useEffect(() => {
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-      if (session?.user) {
-        loadRooms(session.user.email!);
-      }
-    });
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        loadRooms(session.user.email!);
-      } else {
-        setRooms([]);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    checkWalletConnection();
+    
+    // Listen for wallet account changes
+    if (typeof window !== 'undefined' && window.ethereum) {
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+      return () => {
+        window.ethereum?.removeListener('accountsChanged', handleAccountsChanged);
+      };
+    }
   }, []);
 
-  const loadRooms = async (email: string) => {
+  useEffect(() => {
+    if (walletAddress) {
+      loadRooms(walletAddress);
+    }
+  }, [walletAddress]);
+
+  const checkWalletConnection = async () => {
+    if (typeof window === 'undefined' || !window.ethereum) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const stored = localStorage.getItem('walletAddress');
+      if (stored) {
+        setWalletAddress(stored as Address);
+      } else {
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        if (accounts && accounts.length > 0) {
+          setWalletAddress(accounts[0] as Address);
+          localStorage.setItem('walletAddress', accounts[0]);
+        }
+      }
+    } catch (err) {
+      console.error('Error checking wallet:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAccountsChanged = (accounts: string[]) => {
+    if (accounts && accounts.length > 0) {
+      setWalletAddress(accounts[0] as Address);
+      localStorage.setItem('walletAddress', accounts[0]);
+    } else {
+      setWalletAddress(null);
+      localStorage.removeItem('walletAddress');
+      setRooms([]);
+    }
+  };
+
+  const loadRooms = async (address: Address) => {
     setLoadingRooms(true);
     setError('');
 
     try {
-      // Fetch rooms
-      const { data: roomsData, error: dbError } = await supabase
+      const { data, error: dbError } = await supabase
         .from('rooms')
         .select('id, room_name, owner_address, invite_code, created_at')
-        .eq('user_email', email)
+        .eq('owner_wallet_address', address.toLowerCase())
         .order('created_at', { ascending: false });
 
       if (dbError) {
         throw dbError;
       }
 
-      if (!roomsData || roomsData.length === 0) {
+      if (!data || data.length === 0) {
         setRooms([]);
         return;
       }
 
       // Fetch members for all rooms
-      const roomIds = roomsData.map((room) => room.id);
+      const roomIds = data.map((room) => room.id);
       const { data: membersData, error: membersError } = await supabase
         .from('room_members')
         .select('id, room_id, wallet_address, joined_at')
@@ -92,11 +119,10 @@ export default function Rooms() {
 
       if (membersError) {
         console.error('Error loading members:', membersError);
-        // Continue even if members fail to load
       }
 
       // Combine rooms with their members
-      const roomsWithMembers: Room[] = roomsData.map((room) => ({
+      const roomsWithMembers: Room[] = data.map((room) => ({
         ...room,
         members: membersData?.filter((member) => member.room_id === room.id) || [],
       }));
@@ -132,7 +158,7 @@ export default function Rooms() {
     );
   }
 
-  if (!user) {
+  if (!walletAddress) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-zinc-50 to-zinc-100 dark:from-black dark:to-zinc-900">
         <main className="flex w-full max-w-4xl flex-col items-center justify-center px-8 py-16">
@@ -147,13 +173,13 @@ export default function Rooms() {
             </div>
             <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
               <h2 className="mb-2 text-3xl font-semibold text-black dark:text-zinc-50">
-                Sign In Required
+                Connect Wallet Required
               </h2>
               <p className="mb-8 text-zinc-600 dark:text-zinc-400">
-                Please sign in with your Google account to view your rooms
+                Please connect your MetaMask wallet to view your rooms
               </p>
               <div className="flex justify-center">
-                <AuthButton />
+                <WalletButton />
               </div>
             </div>
           </div>
@@ -173,7 +199,7 @@ export default function Rooms() {
             >
               Dpay
             </Link>
-            <AuthButton />
+            <WalletButton />
           </div>
 
           <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -183,7 +209,7 @@ export default function Rooms() {
                   My Rooms
                 </h2>
                 <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                  Signed in as: {user.email}
+                  Connected: <span className="font-mono text-xs">{walletAddress}</span>
                 </p>
               </div>
               <Link
@@ -331,4 +357,3 @@ export default function Rooms() {
     </div>
   );
 }
-

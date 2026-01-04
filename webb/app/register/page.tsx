@@ -4,12 +4,11 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '@/lib/supabase';
-import { getCurrentUserEmail } from '@/lib/auth';
-import AuthButton from '@/components/AuthButton';
-import type { User } from '@supabase/supabase-js';
+import WalletButton from '@/components/WalletButton';
+import type { Address } from 'viem';
 
 export default function Register() {
-  const [user, setUser] = useState<User | null>(null);
+  const [walletAddress, setWalletAddress] = useState<Address | null>(null);
   const [loading, setLoading] = useState(true);
   const [roomName, setRoomName] = useState('');
   const [ownerAddress, setOwnerAddress] = useState('');
@@ -20,28 +19,56 @@ export default function Register() {
   const [inviteLink, setInviteLink] = useState('');
 
   useEffect(() => {
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    // Check for existing wallet connection
+    checkWalletConnection();
+    
+    // Listen for wallet account changes
+    if (typeof window !== 'undefined' && window.ethereum) {
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+      return () => {
+        window.ethereum?.removeListener('accountsChanged', handleAccountsChanged);
+      };
+    }
   }, []);
+
+  const checkWalletConnection = async () => {
+    if (typeof window === 'undefined' || !window.ethereum) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const stored = localStorage.getItem('walletAddress');
+      if (stored) {
+        setWalletAddress(stored as Address);
+      } else {
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        if (accounts && accounts.length > 0) {
+          setWalletAddress(accounts[0] as Address);
+          localStorage.setItem('walletAddress', accounts[0]);
+        }
+      }
+    } catch (err) {
+      console.error('Error checking wallet:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAccountsChanged = (accounts: string[]) => {
+    if (accounts && accounts.length > 0) {
+      setWalletAddress(accounts[0] as Address);
+      localStorage.setItem('walletAddress', accounts[0]);
+    } else {
+      setWalletAddress(null);
+      localStorage.removeItem('walletAddress');
+    }
+  };
 
   const generateInviteCode = () => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
       return crypto.randomUUID().replace(/-/g, '').substring(0, 16);
     }
-    // Fallback for older browsers
     return Math.random().toString(36).substring(2, 18);
   };
 
@@ -56,8 +83,8 @@ export default function Register() {
       return;
     }
 
-    if (!user || !user.email) {
-      setError('Please sign in with Google first');
+    if (!walletAddress) {
+      setError('Please connect your wallet first');
       setSubmitting(false);
       return;
     }
@@ -67,14 +94,14 @@ export default function Register() {
       const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
       const link = `${baseUrl}/join?code=${code}`;
 
-      // Save room to Supabase with user email
+      // Save room to Supabase with wallet address
       const { data, error: dbError } = await supabase
         .from('rooms')
         .insert([
           {
             room_name: roomName.trim(),
             owner_address: ownerAddress.trim(),
-            user_email: user.email,
+            owner_wallet_address: walletAddress,
             invite_code: code,
           },
         ])
@@ -111,7 +138,7 @@ export default function Register() {
     );
   }
 
-  if (!user) {
+  if (!walletAddress) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-zinc-50 to-zinc-100 dark:from-black dark:to-zinc-900">
         <main className="flex w-full max-w-2xl flex-col items-center justify-center px-8 py-16">
@@ -126,13 +153,13 @@ export default function Register() {
             </div>
             <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
               <h2 className="mb-2 text-3xl font-semibold text-black dark:text-zinc-50">
-                Sign In Required
+                Connect Wallet Required
               </h2>
               <p className="mb-8 text-zinc-600 dark:text-zinc-400">
-                Please sign in with your Google account to create a room
+                Please connect your MetaMask wallet to create a room
               </p>
               <div className="flex justify-center">
-                <AuthButton />
+                <WalletButton />
               </div>
               <p className="mt-6 text-center text-sm text-zinc-600 dark:text-zinc-400">
                 Want to join a room?{' '}
@@ -238,14 +265,14 @@ export default function Register() {
             >
               Dpay
             </Link>
-            <AuthButton />
+            <WalletButton />
           </div>
           <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <h2 className="mb-2 text-3xl font-semibold text-black dark:text-zinc-50">
               Create Room
             </h2>
             <p className="mb-2 text-sm text-zinc-600 dark:text-zinc-400">
-              Signed in as: <span className="font-medium">{user.email}</span>
+              Connected: <span className="font-mono text-xs">{walletAddress}</span>
             </p>
             <p className="mb-8 text-zinc-600 dark:text-zinc-400">
               Create a room and invite your family members to join

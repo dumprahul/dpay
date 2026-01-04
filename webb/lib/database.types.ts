@@ -2,7 +2,7 @@ export interface Room {
   id: string;
   room_name: string;
   owner_address: string;
-  user_email: string;
+  owner_wallet_address: string;
   invite_code: string;
   created_at: string;
 }

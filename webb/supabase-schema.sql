@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS rooms (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   room_name TEXT NOT NULL,
   owner_address TEXT NOT NULL,
-  user_email TEXT NOT NULL,
+  owner_wallet_address TEXT NOT NULL,
   invite_code TEXT UNIQUE NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
 );
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS room_members (
 
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_rooms_invite_code ON rooms(invite_code);
-CREATE INDEX IF NOT EXISTS idx_rooms_user_email ON rooms(user_email);
+CREATE INDEX IF NOT EXISTS idx_rooms_owner_wallet_address ON rooms(owner_wallet_address);
 CREATE INDEX IF NOT EXISTS idx_room_members_room_id ON room_members(room_id);
 CREATE INDEX IF NOT EXISTS idx_room_members_wallet_address ON room_members(wallet_address);
 
@@ -30,18 +30,24 @@ CREATE INDEX IF NOT EXISTS idx_room_members_wallet_address ON room_members(walle
 ALTER TABLE rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE room_members ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Allow public read access to rooms" ON rooms;
+DROP POLICY IF EXISTS "Allow authenticated users to insert rooms" ON rooms;
+DROP POLICY IF EXISTS "Allow users to read their own rooms" ON rooms;
+DROP POLICY IF EXISTS "Allow public insert access to rooms" ON rooms;
+
 -- Create policies for rooms table
 -- Allow anyone to read rooms (needed for invite code verification)
 CREATE POLICY "Allow public read access to rooms" ON rooms
   FOR SELECT USING (true);
 
--- Allow authenticated users to insert rooms
-CREATE POLICY "Allow authenticated users to insert rooms" ON rooms
-  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
-  
--- Allow users to read their own rooms
-CREATE POLICY "Allow users to read their own rooms" ON rooms
-  FOR SELECT USING (auth.jwt() ->> 'email' = user_email);
+-- Allow anyone to insert rooms (wallet-based auth)
+CREATE POLICY "Allow public insert access to rooms" ON rooms
+  FOR INSERT WITH CHECK (true);
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Allow public read access to room_members" ON room_members;
+DROP POLICY IF EXISTS "Allow public insert access to room_members" ON room_members;
 
 -- Create policies for room_members table
 -- Allow anyone to read room members

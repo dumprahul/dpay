@@ -42,6 +42,20 @@ export default function DelegationModal({
       return;
     }
 
+    // Validate amount
+    const amountNum = parseFloat(amount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      setError('Please enter a valid amount greater than 0');
+      return;
+    }
+
+    // Validate period duration
+    const periodDays = parseFloat(periodDuration);
+    if (isNaN(periodDays) || periodDays <= 0 || !Number.isInteger(periodDays)) {
+      setError('Please enter a valid whole number of days (1 or more)');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -56,8 +70,11 @@ export default function DelegationModal({
 
       // Parse amount (USDC has 6 decimals)
       const periodAmount = parseUnits(amount, 6);
-      // Parse period duration (convert days to seconds if needed)
-      const periodDurationSeconds = parseInt(periodDuration) * 86400; // Assuming input is in days
+      
+      // Calculate period duration in seconds
+      // 1 day = 24 hours * 60 minutes * 60 seconds = 86400 seconds
+      const SECONDS_PER_DAY = 86400;
+      const periodDurationSeconds = Math.floor(periodDays * SECONDS_PER_DAY);
 
       const grantedPermissions = await walletClient.requestExecutionPermissions([
         {
@@ -184,8 +201,15 @@ export default function DelegationModal({
               type="number"
               id="periodDuration"
               value={periodDuration}
-              onChange={(e) => setPeriodDuration(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                // Only allow positive integers
+                if (value === '' || (parseFloat(value) > 0 && Number.isInteger(parseFloat(value)))) {
+                  setPeriodDuration(value);
+                }
+              }}
               min="1"
+              step="1"
               className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-black focus:border-black focus:outline-none focus:ring-2 focus:ring-black dark:border-zinc-700 dark:bg-zinc-800 dark:text-white dark:focus:border-white dark:focus:ring-white"
               placeholder="1"
               disabled={loading}
@@ -193,6 +217,11 @@ export default function DelegationModal({
             <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">
               How often this delegation can be used (in days)
             </p>
+            {periodDuration && !isNaN(parseFloat(periodDuration)) && parseFloat(periodDuration) > 0 && (
+              <p className="mt-1 text-xs text-blue-600 dark:text-blue-400">
+                Period: {parseFloat(periodDuration)} day(s) = {Math.floor(parseFloat(periodDuration) * 86400).toLocaleString()} seconds
+              </p>
+            )}
           </div>
 
           <div>
