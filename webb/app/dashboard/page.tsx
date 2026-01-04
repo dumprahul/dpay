@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import WalletButton from '@/components/WalletButton';
+import { getStoredSessionAccount } from '@/lib/session-account';
 import { getDelegationsWithDetails } from '@/lib/delegations';
-import type { Address } from 'viem';
+import PaymentModal from '@/components/PaymentModal';
 import type { Delegation } from '@/lib/database.types';
 
 interface DelegationWithDetails extends Delegation {
@@ -22,75 +22,59 @@ interface DelegationWithDetails extends Delegation {
 }
 
 export default function Dashboard() {
-  const [walletAddress, setWalletAddress] = useState<Address | null>(null);
+  const [smartAccountAddress, setSmartAccountAddress] = useState<string | null>(null);
+  const [sessionAccountAddress, setSessionAccountAddress] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [delegations, setDelegations] = useState<DelegationWithDetails[]>([]);
   const [loadingDelegations, setLoadingDelegations] = useState(false);
   const [error, setError] = useState('');
+  const [paymentModal, setPaymentModal] = useState<{
+    isOpen: boolean;
+    delegation: DelegationWithDetails | null;
+  }>({
+    isOpen: false,
+    delegation: null,
+  });
 
   useEffect(() => {
-    checkWalletConnection();
-    
-    // Listen for wallet account changes
-    if (typeof window !== 'undefined' && window.ethereum) {
-      window.ethereum.on('accountsChanged', handleAccountsChanged);
-      return () => {
-        window.ethereum?.removeListener('accountsChanged', handleAccountsChanged);
-      };
-    }
+    loadSessionAccount();
   }, []);
 
   useEffect(() => {
-    if (walletAddress) {
+    if (smartAccountAddress) {
       loadDelegations();
     } else {
       setDelegations([]);
     }
-  }, [walletAddress]);
+  }, [smartAccountAddress]);
 
-  const checkWalletConnection = async () => {
-    if (typeof window === 'undefined' || !window.ethereum) {
+  const loadSessionAccount = () => {
+    if (typeof window === 'undefined') {
       setLoading(false);
       return;
     }
 
     try {
-      const stored = localStorage.getItem('walletAddress');
-      if (stored) {
-        setWalletAddress(stored as Address);
-      } else {
-        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-        if (accounts && accounts.length > 0) {
-          setWalletAddress(accounts[0] as Address);
-          localStorage.setItem('walletAddress', accounts[0]);
-        }
+      const sessionAccount = getStoredSessionAccount();
+      if (sessionAccount) {
+        setSmartAccountAddress(sessionAccount.smartAccountAddress);
+        setSessionAccountAddress(sessionAccount.address);
       }
     } catch (err) {
-      console.error('Error checking wallet:', err);
+      console.error('Error loading session account:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAccountsChanged = (accounts: string[]) => {
-    if (accounts && accounts.length > 0) {
-      setWalletAddress(accounts[0] as Address);
-      localStorage.setItem('walletAddress', accounts[0]);
-    } else {
-      setWalletAddress(null);
-      localStorage.removeItem('walletAddress');
-      setDelegations([]);
-    }
-  };
-
   const loadDelegations = async () => {
-    if (!walletAddress) return;
+    if (!smartAccountAddress) return;
 
     setLoadingDelegations(true);
     setError('');
 
     try {
-      const data = await getDelegationsWithDetails(walletAddress);
+      const data = await getDelegationsWithDetails(smartAccountAddress);
       setDelegations(data || []);
     } catch (err: any) {
       console.error('Error loading delegations:', err);
@@ -137,7 +121,7 @@ export default function Dashboard() {
     );
   }
 
-  if (!walletAddress) {
+  if (!smartAccountAddress) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-zinc-50 to-zinc-100 dark:from-black dark:to-zinc-900">
         <main className="flex w-full max-w-4xl flex-col items-center justify-center px-8 py-16">
@@ -152,13 +136,28 @@ export default function Dashboard() {
             </div>
             <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
               <h2 className="mb-2 text-3xl font-semibold text-black dark:text-zinc-50">
-                Connect Wallet Required
+                No Session Account Found
               </h2>
-              <p className="mb-8 text-zinc-600 dark:text-zinc-400">
-                Please connect your MetaMask wallet to view your delegations
+              <p className="mb-4 text-zinc-600 dark:text-zinc-400">
+                You need to join a room first to create your session account and smart account.
               </p>
-              <div className="flex justify-center">
-                <WalletButton />
+              <p className="mb-8 text-sm text-zinc-500 dark:text-zinc-500">
+                When you join a room, a smart account will be automatically created for you. 
+                Once you receive delegations, they will appear here.
+              </p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+                <Link
+                  href="/join"
+                  className="rounded-lg bg-black px-6 py-3 text-center font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200"
+                >
+                  Join a Room
+                </Link>
+                <Link
+                  href="/"
+                  className="rounded-lg border border-zinc-300 bg-white px-6 py-3 text-center font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                >
+                  Back to Home
+                </Link>
               </div>
             </div>
           </div>
@@ -178,7 +177,12 @@ export default function Dashboard() {
             >
               Dpay
             </Link>
-            <WalletButton />
+            <Link
+              href="/join"
+              className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+            >
+              Join Room
+            </Link>
           </div>
 
           <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -186,9 +190,16 @@ export default function Dashboard() {
               <h2 className="text-3xl font-semibold text-black dark:text-zinc-50">
                 My Delegations
               </h2>
-              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                Connected: <span className="font-mono text-xs">{walletAddress}</span>
-              </p>
+              <div className="mt-2 space-y-1">
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                  Smart Account: <span className="font-mono text-xs">{formatAddress(smartAccountAddress)}</span>
+                </p>
+                {sessionAccountAddress && (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-500">
+                    Session EOA: <span className="font-mono">{formatAddress(sessionAccountAddress)}</span>
+                  </p>
+                )}
+              </div>
             </div>
 
             {error && (
@@ -330,6 +341,21 @@ export default function Dashboard() {
                       <div className="text-xs text-zinc-500 dark:text-zinc-500">
                         Created: {new Date(delegation.created_at).toLocaleString()}
                       </div>
+
+                      {/* Pay Button */}
+                      <div className="pt-4">
+                        <button
+                          onClick={() => {
+                            setPaymentModal({
+                              isOpen: true,
+                              delegation: delegation,
+                            });
+                          }}
+                          className="w-full rounded-lg bg-green-600 px-4 py-3 font-medium text-white transition-colors hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
+                        >
+                          Pay
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -338,6 +364,16 @@ export default function Dashboard() {
           </div>
         </div>
       </main>
+
+      {paymentModal.delegation && (
+        <PaymentModal
+          isOpen={paymentModal.isOpen}
+          onClose={() =>
+            setPaymentModal({ isOpen: false, delegation: null })
+          }
+          delegation={paymentModal.delegation}
+        />
+      )}
     </div>
   );
 }
