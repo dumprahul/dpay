@@ -10,8 +10,8 @@ contracts:
       - event: RedeemedDelegation
       - event: DisabledDelegation
 networks:
-  - id: 84532 # Base Sepolia
-    start_block: 19490000
+  - id: 11155111 # Base Sepolia
+    start_block: 9976000
     contracts:
       - name: DelegationManager
         address: 0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3
